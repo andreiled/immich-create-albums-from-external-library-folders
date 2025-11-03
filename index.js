@@ -3,18 +3,20 @@
 import fs from 'node:fs/promises';
 import {
     addAssetsToAlbum,
-    createAlbum,
     getAllAlbums,
     getAssetsByOriginalPath,
     getUniqueOriginalPaths,
     init,
-    updateAlbumInfo
 } from "@immich/sdk";
+import {
+    addOriginalPathToAlbum,
+    createManagedAlbum,
+    findAlbumByOriginalPath,
+    findManagedAlbumByName,
+} from './util/albums.js';
 import applyConsoleLogFormat from './util/console-log-format.js';
 
 applyConsoleLogFormat();
-
-const ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER = '-- Original Paths --';
 
 const usersWithLibraries = JSON.parse(await fs.readFile("/ext_library_folders_to_albums", { encoding: 'utf8' }));
 
@@ -42,7 +44,7 @@ async function createUpdateDeleteAlbums(externalLibraryParams) {
         const album = await createOrUpdateAlbum(path, folder, existingAlbums);
         if (album) {
             const assets = await getAssetsByOriginalPath({path: folder});
-            console.info(`[${folder}] Adding ${assets.length} assets into album '${album.albumName}' ...`);
+            console.info(`[${folder}] Adding ${assets.length} assets to album '${album.albumName}' ...`);
 
             const results = await addAssetsToAlbum({
                 id: album.id,
@@ -53,9 +55,9 @@ async function createUpdateDeleteAlbums(externalLibraryParams) {
             const numDuplicates = results.filter(it => !it.success && it.error === 'duplicate').length;
             const failedToAdd = results.filter(it => !it.success && it.error !== 'duplicate');
 
-            console.info(`[${folder}] Added ${numAdded} assets into album '${album.albumName}', ${numDuplicates} were already in the album`);
+            console.info(`[${folder}] Added ${numAdded} assets to album '${album.albumName}', ${numDuplicates} were already in the album`);
             if (failedToAdd.length > 0) {
-                console.info(`[${folder}] Failed to add ${failedToAdd.length} assets into album '${album.albumName}':
+                console.info(`[${folder}] Failed to add ${failedToAdd.length} assets to album '${album.albumName}':
 - ${failedToAdd.map(it => `${it.id}: ${it.error}`).join('\n- ')}`);
             }
         }
@@ -82,15 +84,11 @@ async function createOrUpdateAlbum(libraryPath, folder, existingAlbums) {
         || findManagedAlbumByName(existingAlbums, albumName);
     if (existingAlbum) {
         console.info(`[${folder}] Use existing album '${existingAlbum.albumName}'`);
-        await addOriginalPathToAlbumDescription(existingAlbum, folder);
+        await addOriginalPathToAlbum(existingAlbum, folder);
         return existingAlbum;
     } else {
         console.info(`[${folder}] Create new album '${albumName}'`);
-        const newAlbum = await createAlbum({createAlbumDto: {
-            albumName,
-            description: `${ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER}\n${folder}`
-        }});
-        return newAlbum;
+        return createManagedAlbum(albumName, [folder]);
     }
 }
 
@@ -98,41 +96,4 @@ function composeAlbumName(relativePath) {
     const pathElements = relativePath.split('/');
     // Remove leading date & time if any.
     return pathElements[0].replace(/^\d{4}-\d{2}-\d{2}[\d\s\.-]*/, '');
-}
-
-function findAlbumByOriginalPath(existingAlbums, originalPath) {
-    existingAlbums.find(album => {
-        return album.description.indexOf(originalPath) !== -1
-            && getOriginalPaths(album).includes(originalPath)
-    });
-}
-
-function findManagedAlbumByName(existingAlbums, albumName) {
-    return existingAlbums.find(album => {
-        return album.albumName === albumName
-            && album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER) !== -1
-    });
-}
-
-function getOriginalPaths(album) {
-    const headerStart = album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER);
-    if (headerStart === -1) {
-        return [];
-    } else {
-        const pathsStr = album.description.substring(headerStart + ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER.length).trim();
-        return pathsStr.split('\n');
-    }
-}
-
-async function addOriginalPathToAlbumDescription(album, originalPath) {
-    const headerStart = album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER);
-    const originalPaths = Array.from(new Set(getOriginalPaths(album).concat([originalPath]))).sort();
-
-    await updateAlbumInfo({
-        id: album.id,
-        updateAlbumDto: {
-            description: `${album.description.substring(0, headerStart)}${ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER}
-${originalPaths.join('\n')}`
-        }
-    });
 }

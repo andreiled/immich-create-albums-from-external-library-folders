@@ -1,6 +1,7 @@
 FROM node:22-alpine
 
-COPY package.json package-lock.json util *.js /scripts/
+COPY package.json package-lock.json *.js /scripts/
+COPY util/*.js /scripts/util/
 
 WORKDIR /scripts
 RUN npm install
