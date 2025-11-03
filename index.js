@@ -10,6 +10,9 @@ import {
     init,
     updateAlbumInfo
 } from "@immich/sdk";
+import applyConsoleLogFormat from './util/console-log-format.js';
+
+applyConsoleLogFormat();
 
 const ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER = '-- Original Paths --';
 
@@ -30,7 +33,7 @@ async function createUpdateDeleteAlbums(externalLibraryParams) {
 
     // Do not `await` to let this request run in background and queue more work.
     const existingAlbumsFuture = getAllAlbums({shared: false});
-    
+
     const allFolders = (await getUniqueOriginalPaths()).filter((it) => it.startsWith(path)).slice(0, 100);
     console.info(`Found ${allFolders.length} folders`);
 
