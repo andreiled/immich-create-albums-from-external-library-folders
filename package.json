@@ -1,0 +1,15 @@
+{
+  "name": "immich-create-albums-from-external-library-folders",
+  "version": "0.1.0",
+  "description": "Automation script for Immich to create albums based on foldes in external libraries ",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Andrey <andreiled@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@immich/sdk": "^2.2.1"
+  }
+}
