@@ -1,4 +1,4 @@
-import { createAlbum, updateAlbumInfo } from "@immich/sdk";
+import { AlbumResponseDto, createAlbum, updateAlbumInfo } from "@immich/sdk";
 
 const ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER = '-- Original Paths --';
 
@@ -8,7 +8,7 @@ const ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER = '-- Original Paths --';
  * @param {array} originalPaths - Array of original assets folder paths.
  * @returns {object} - The created album object.
  */
-export async function createManagedAlbum(albumName, originalPaths) {
+export async function createManagedAlbum(albumName: string, originalPaths: string[]) {
     return createAlbum({createAlbumDto: {
         albumName,
         description: composeAlbumDescription(originalPaths)
@@ -17,10 +17,10 @@ export async function createManagedAlbum(albumName, originalPaths) {
 
 /**
  * Update the album's metadata to indicate that it will contain assets from the specified folder.
- * @param {object} album - The album object (returned by Immich SDK).
+ * @param {AlbumResponseDto} album - The album object (returned by Immich SDK).
  * @param {string} originalPath - Original assets folder path to add.
  */
-export async function addOriginalPathToAlbum(album, originalPath) {
+export async function addOriginalPathToAlbum(album: AlbumResponseDto, originalPath: string) {
     const headerStart = album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER);
     const originalPaths = Array.from(new Set(getOriginalPaths(album).concat([originalPath]))).sort();
 
@@ -34,10 +34,10 @@ export async function addOriginalPathToAlbum(album, originalPath) {
 
 /**
  * Get the list of original asset folder paths from the album's metadata.
- * @param {object} album - The album object (returned by Immich SDK).
+ * @param {AlbumResponseDto} album - The album object (returned by Immich SDK).
  * @returns {array} - Array of original assets folder paths.
  */
-export function getOriginalPaths(album) {
+export function getOriginalPaths(album: AlbumResponseDto): string[] {
     const headerStart = album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER);
     if (headerStart === -1) {
         return [];
@@ -53,8 +53,8 @@ export function getOriginalPaths(album) {
  * @param {string} originalPath - Original assets folder path.
  * @returns {object|undefined} - The found album object, or `undefined` if not found.
  */
-export function findAlbumByOriginalPath(albums, originalPath) {
-    albums.find(album => {
+export function findAlbumByOriginalPath(albums: AlbumResponseDto[], originalPath: string) {
+    return albums.find(album => {
         return album.description.indexOf(originalPath) !== -1
             && getOriginalPaths(album).includes(originalPath)
     });
@@ -66,14 +66,14 @@ export function findAlbumByOriginalPath(albums, originalPath) {
  * @param {string} albumName - Expected album name.
  * @returns {object|undefined} - The found album object, or `undefined` if not found.
  */
-export function findManagedAlbumByName(albums, albumName) {
+export function findManagedAlbumByName(albums: AlbumResponseDto[], albumName: string) {
     return albums.find(album => {
         return album.albumName === albumName
             && album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER) !== -1
     });
 }
 
-function composeAlbumDescription(originalPaths) {
+function composeAlbumDescription(originalPaths: string[]): string {
     return `${ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER}
 ${originalPaths.join('\n')}`;
 }

@@ -1,13 +1,14 @@
 "use strict";
 
-import fs from 'node:fs/promises';
 import {
+    AlbumResponseDto,
     addAssetsToAlbum,
     getAllAlbums,
     getAssetsByOriginalPath,
     getUniqueOriginalPaths,
     init,
 } from "@immich/sdk";
+import { LibraryScanConfig, loadConfig } from './config.js';
 import {
     addOriginalPathToAlbum,
     createManagedAlbum,
@@ -18,16 +19,16 @@ import applyConsoleLogFormat from './util/console-log-format.js';
 
 applyConsoleLogFormat();
 
-const usersWithLibraries = JSON.parse(await fs.readFile("/ext_library_folders_to_albums", { encoding: 'utf8' }));
+const extLibrariesToScan = await loadConfig();
 
 // Process the array elements sequentially rather than in parallel.
-usersWithLibraries.reduce(
+extLibrariesToScan.reduce(
     (acc, curr) => acc.then(async () => createUpdateDeleteAlbums(curr)),
-    Promise.resolve(null)
+    Promise.resolve()
 )
 
-async function createUpdateDeleteAlbums(externalLibraryParams) {
-    const { path, apiKey} = externalLibraryParams;
+async function createUpdateDeleteAlbums(extLibraryScanParams: LibraryScanConfig): Promise<void> {
+    const { path, apiKey} = extLibraryScanParams;
 
     init({ baseUrl: "http://immich_server:2283/api", apiKey });
 
@@ -66,7 +67,7 @@ async function createUpdateDeleteAlbums(externalLibraryParams) {
     console.info(`Finished processing external library: ${path}`);
 }
 
-async function createOrUpdateAlbum(libraryPath, folder, existingAlbums) {
+async function createOrUpdateAlbum(libraryPath: string, folder: string, existingAlbums: AlbumResponseDto[]): Promise<AlbumResponseDto|undefined> {
     // Note: this will likely not work on Windows.
     const relativePath = folder.replace(libraryPath, '').replace(/^\//, '');
     if (relativePath === '') {
@@ -92,7 +93,7 @@ async function createOrUpdateAlbum(libraryPath, folder, existingAlbums) {
     }
 }
 
-function composeAlbumName(relativePath) {
+function composeAlbumName(relativePath: string): string {
     const pathElements = relativePath.split('/');
     // Remove leading date & time if any.
     return pathElements[0].replace(/^\d{4}-\d{2}-\d{2}[\d\s\.-]*/, '');

@@ -11,5 +11,10 @@
   "license": "MIT",
   "dependencies": {
     "@immich/sdk": "^2.2.1"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.2",
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
   }
 }
