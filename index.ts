@@ -27,6 +27,8 @@ extLibrariesToScan.reduce(
 )
 
 async function createUpdateDeleteAlbums(extLibraryScanParams: LibraryScanConfig): Promise<void> {
+    const startTime = Date.now();
+
     const { path, apiKey} = extLibraryScanParams;
 
     init({ baseUrl: "http://immich_server:2283/api", apiKey });
@@ -41,38 +43,54 @@ async function createUpdateDeleteAlbums(extLibraryScanParams: LibraryScanConfig)
     console.info(`Processing ${allFolders.length} folders in batches of ${batchSize} ...`);
 
     const existingAlbums = await existingAlbumsFuture;
+    const albumsExisted = existingAlbums.size;
 
+    let foldersProcessed = 0, foldersIgnored = 0, albumsCreated = 0, assetsProcessed = 0, assetsAdded = 0, assetsDuplicate = 0, assetsFailed = 0;
     for (const batch of splitIntoBatches(allFolders, batchSize)) {
         // 1.  Split into batches and process batches sequentially to avoid running out of memory
         //     when grouping all original folders by the their desired album names.
         // 2.  Avoid the race condition caused by processing multiple folders mapping to the same album name in parallel
         //     by grouping such folders together and processing folders in each such group in a sequence
         //     (while still processing independent folders mapping to different albums in parallel).
-        const desiredAlbumsWithFolders = (
-            batch.map(folder => [composeAlbumName(path, folder), folder])
-                .filter(([desiredAlbumName, folder]) => !!desiredAlbumName) as [string, string][]
-            )
-            .reduce(
-                (acc, [desiredAlbumName, folder]) => {
-                    (acc[desiredAlbumName] = acc[desiredAlbumName] || []).push(folder);
-                    return acc;
-                },
-                {} as Record<string, string[]>
-            );
+        const foldersWithDesiredAlbumNames = batch.map(folder => [composeAlbumName(path, folder), folder])
+            .filter(([desiredAlbumName, folder]) => !!desiredAlbumName) as [string, string][];
+        foldersIgnored += batch.length - foldersWithDesiredAlbumNames.length;
+
+        const desiredAlbumsWithFolders = foldersWithDesiredAlbumNames.reduce(
+            (acc, [desiredAlbumName, folder]) => {
+                (acc[desiredAlbumName] = acc[desiredAlbumName] || []).push(folder);
+                return acc;
+            },
+            {} as Record<string, string[]>
+        );
 
         await Promise.all(Object.entries(desiredAlbumsWithFolders).map(async ([desiredAlbumName, folders]) => {
             for (const folder of folders) {
-                const album = await createOrUpdateAlbum(folder, desiredAlbumName, existingAlbums);
+                const [album, created] = await createOrUpdateAlbum(folder, desiredAlbumName, existingAlbums);
                 existingAlbums.put(album);
+                if (created) albumsCreated++;
 
-                await addFolderAssetsToAlbum(folder, album);
+                const {processed, added, duplicate, failed} = await addFolderAssetsToAlbum(folder, album);
+                assetsProcessed += processed;
+                assetsAdded += added;
+                assetsDuplicate += duplicate;
+                assetsFailed += failed;
+
+                foldersProcessed++;
             }
         }));
     }
 
     // TODO: clean up albums if all associated original folders were removed.
 
-    console.info(`Finished processing external library: ${path}`);
+    const timeElapsed = Date.now() - startTime;
+    console.info(`Finished processing external library: ${path}
+Statistics:
+- Time elapsed: ${(0.001 * timeElapsed).toFixed(1)}s
+- ${allFolders.length} original folders found: ${foldersProcessed} processes & ${foldersIgnored} ignored
+- ${existingAlbums.size} managed albums exist in total: ${albumsExisted} existed previously, ${albumsCreated} created
+- ${assetsProcessed} assets processed: ${assetsAdded} added to managed albums, ${assetsDuplicate} already were in the appropriate albums, ${assetsFailed} could not be added to the appropriate albums
+`);
 }
 
 function* splitIntoBatches<Elem>(array: Elem[], batchSize: number): Generator<Elem[]> {
@@ -87,16 +105,16 @@ async function createOrUpdateAlbum(
     folder: string,
     desiredAlbumName: string,
     existingAlbums: AlbumsIndex
-): Promise<AlbumResponseDto> {
+): Promise<[AlbumResponseDto, boolean]> {
     const existingAlbum = existingAlbums.findByOriginalPath(folder)
         || existingAlbums.findByName(desiredAlbumName);
 
     if (existingAlbum) {
         console.info(`[${folder}] Use existing album '${existingAlbum.albumName}'`);
-        return addOriginalPathToAlbum(existingAlbum, folder);
+        return [await addOriginalPathToAlbum(existingAlbum, folder), false];
     } else {
         console.info(`[${folder}] Create new album '${desiredAlbumName}'`);
-        return createManagedAlbum(desiredAlbumName, [folder]);
+        return [await createManagedAlbum(desiredAlbumName, [folder]), true];
     }
 }
 
@@ -121,7 +139,7 @@ function composeAlbumName(libraryPath: string, folder: string): string|undefined
 }
 
 // Add all assets from the specified folder to the specified album.
-async function addFolderAssetsToAlbum(folder: string, album: AlbumResponseDto): Promise<void> {
+async function addFolderAssetsToAlbum(folder: string, album: AlbumResponseDto): Promise<{processed: number, added: number, duplicate: number, failed: number}> {
     const assets = await getAssetsByOriginalPath({path: folder});
     console.info(`[${folder}] Adding ${assets.length} assets to album '${album.albumName}' ...`);
 
@@ -139,4 +157,6 @@ async function addFolderAssetsToAlbum(folder: string, album: AlbumResponseDto): 
         console.info(`[${folder}] Failed to add ${failedToAdd.length} assets to album '${album.albumName}':
 - ${failedToAdd.map(it => `${it.id}: ${it.error}`).join('\n- ')}`);
     }
+
+    return {processed: assets.length, added: numAdded, duplicate: numDuplicates, failed: failedToAdd.length};
 }

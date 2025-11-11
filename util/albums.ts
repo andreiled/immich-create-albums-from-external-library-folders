@@ -23,6 +23,10 @@ export class AlbumsIndex {
             new Map() as Map<string, AlbumResponseDto[]>);
     }
 
+    get size(): number {
+        return this.byId.size;
+    }
+
     findByName(albumName: string): AlbumResponseDto | undefined {
         const similarlyNamedAlbums = this.byName.get(albumName);
         return similarlyNamedAlbums ? similarlyNamedAlbums[0] : undefined;
