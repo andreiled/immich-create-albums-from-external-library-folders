@@ -27,21 +27,20 @@ export class AlbumsIndex {
         return this.byId.size;
     }
 
-    findByName(albumName: string): AlbumResponseDto | undefined {
-        const similarlyNamedAlbums = this.byName.get(albumName);
-        return similarlyNamedAlbums ? similarlyNamedAlbums[0] : undefined;
+    findByName(albumName: string): AlbumResponseDto[] {
+        return this.byName.get(albumName) || [];
     }
 
     /**
-     * Find an album claiming to contain assets from the specified original path (according to the metadata embedded into its description).
+     * Find all albums claiming to contain assets from the specified original path (according to the metadata embedded into their descriptions).
      * @param {string} originalPath - Original assets folder path.
-     * @returns {object|undefined} - The found album object, or `undefined` if not found.
+     * @returns {array} - Found album objects.
      */
-    findByOriginalPath(originalPath: string) {
-        return this.byId.values().find(album => {
+    findByOriginalPath(originalPath: string): readonly AlbumResponseDto[] {
+        return Array.from(this.byId.values().filter(album => {
             return album.description.indexOf(originalPath) !== -1
                 && getOriginalPaths(album).includes(originalPath)
-        });
+        }));
     }
 
     put(album: AlbumResponseDto) {

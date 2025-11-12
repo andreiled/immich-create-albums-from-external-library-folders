@@ -66,15 +66,19 @@ async function createUpdateDeleteAlbums(extLibraryScanParams: LibraryScanConfig)
 
         await Promise.all(Object.entries(desiredAlbumsWithFolders).map(async ([desiredAlbumName, folders]) => {
             for (const folder of folders) {
-                const [album, created] = await createOrUpdateAlbum(folder, desiredAlbumName, existingAlbums);
-                existingAlbums.put(album);
-                if (created) albumsCreated++;
+                const [albums, created] = await createOrUpdateAlbum(folder, desiredAlbumName, existingAlbums);
 
-                const {processed, added, duplicate, failed} = await addFolderAssetsToAlbum(folder, album);
-                assetsProcessed += processed;
-                assetsAdded += added;
-                assetsDuplicate += duplicate;
-                assetsFailed += failed;
+                if (created) albumsCreated += albums.length;
+                for (const album of albums) {
+                    existingAlbums.put(album);
+
+                    // TODO: how to count assets added to multiple albums?
+                    const {processed, added, duplicate, failed} = await addFolderAssetsToAlbum(folder, album);
+                    assetsProcessed += processed;
+                    assetsAdded += added;
+                    assetsDuplicate += duplicate;
+                    assetsFailed += failed;
+                }
 
                 foldersProcessed++;
             }
@@ -105,16 +109,29 @@ async function createOrUpdateAlbum(
     folder: string,
     desiredAlbumName: string,
     existingAlbums: AlbumsIndex
-): Promise<[AlbumResponseDto, boolean]> {
-    const existingAlbum = existingAlbums.findByOriginalPath(folder)
-        || existingAlbums.findByName(desiredAlbumName);
+): Promise<[readonly AlbumResponseDto[], boolean]> {
+    const foundByOriginalPath = existingAlbums.findByOriginalPath(folder);
+    if (foundByOriginalPath.length > 0) {
+        console.info(
+            `[${folder}] Use existing album(s):`,
+            prettyFormatList(foundByOriginalPath.map(it => `'${it.albumName}' (${it.id})`)));
 
-    if (existingAlbum) {
-        console.info(`[${folder}] Use existing album '${existingAlbum.albumName}'`);
-        return [await addOriginalPathToAlbum(existingAlbum, folder), false];
+        return [foundByOriginalPath, false];
     } else {
-        console.info(`[${folder}] Create new album '${desiredAlbumName}'`);
-        return [await createManagedAlbum(desiredAlbumName, [folder]), true];
+        // TODO: should we select just one of the below albums with the matching name?
+        const similarlyNamed = existingAlbums.findByName(desiredAlbumName);
+        if (similarlyNamed.length > 0) {
+            console.info(`[${folder}] Use existing album(s) based on the name:`, prettyFormatList(similarlyNamed.map(it => it.id)));
+
+            return [
+                await Promise.all(similarlyNamed
+                    .map(async (existingAlbum) => addOriginalPathToAlbum(existingAlbum, folder))),
+                false
+            ];
+        } else {
+            console.info(`[${folder}] Create new album '${desiredAlbumName}'`);
+            return [[await createManagedAlbum(desiredAlbumName, [folder])], true];
+        }
     }
 }
 
@@ -154,9 +171,21 @@ async function addFolderAssetsToAlbum(folder: string, album: AlbumResponseDto): 
 
     console.info(`[${folder}] Added ${numAdded} assets to album '${album.albumName}', ${numDuplicates} were already in the album`);
     if (failedToAdd.length > 0) {
-        console.info(`[${folder}] Failed to add ${failedToAdd.length} assets to album '${album.albumName}':
-- ${failedToAdd.map(it => `${it.id}: ${it.error}`).join('\n- ')}`);
+        console.info(
+            `[${folder}] Failed to add ${failedToAdd.length} assets to album '${album.albumName}':`,
+            prettyFormatList(failedToAdd.map(it => `${it.id}: ${it.error}`)));
     }
 
     return {processed: assets.length, added: numAdded, duplicate: numDuplicates, failed: failedToAdd.length};
+}
+
+function prettyFormatList<Elem>(items: Iterable<Elem>|readonly Elem[]): string {
+    const array = Array.isArray(items) ? items : Array.from(items as Iterable<Elem>);
+    if (array.length > 1) {
+        return '\n- ' + array.join('\n- ');
+    } else if (array.length === 1) {
+        return `${array[0]}`;
+    } else {
+        return '[]';
+    }
 }
