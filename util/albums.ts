@@ -62,7 +62,7 @@ export class AlbumsIndex {
 }
 
 export async function findAllManagedAlbums(): Promise<AlbumsIndex> {
-    const allAlbums = await getAllAlbums({shared: false});
+    const allAlbums = await getAllAlbums({});
     return new AlbumsIndex(
         allAlbums.filter(album => album.description.indexOf(ALBUM_DESCRIPTION_ORIGINAL_PATHS_HEADER) !== -1)
     );
