@@ -38,8 +38,8 @@ async function createUpdateDeleteAlbums(extLibraryScanParams: LibraryScanConfig)
     // Do not `await` to let this request run in background and queue more work in the meantime.
     const existingAlbumsFuture = findAllManagedAlbums();
 
-    const allFolders = (await getUniqueOriginalPaths()).filter((it) => it.startsWith(path)).slice(0, 150);
-    const batchSize = 50;
+    const allFolders = (await getUniqueOriginalPaths()).filter((it) => it.startsWith(path));
+    const batchSize = 100;
     console.info(`Processing ${allFolders.length} folders in batches of ${batchSize} ...`);
 
     const existingAlbums = await existingAlbumsFuture;
